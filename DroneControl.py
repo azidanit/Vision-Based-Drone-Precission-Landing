@@ -23,6 +23,8 @@ class PID:
 
 class DroneControl(QObject):
     changePixmap1 = pyqtSignal(QImage)
+    changePixmap2 = pyqtSignal(QImage)
+    changePixmap3 = pyqtSignal(QImage)
     changeFpsCounter = pyqtSignal(int)
 
     def __init__(self):
@@ -310,11 +312,27 @@ class DroneControl(QObject):
 
             self.changePixmap1.emit(p)
 
-            cv2.imshow('seg', frame_threshold)
-            cv2.imshow('morhp', frame_morph)
+            img2 = cv2.cvtColor(frame_morph, cv2.COLOR_GRAY2BGR)
+            h, w , ch = img2.shape
+            bytesPerLine = w * ch
+            convertToQtFormat2 = QImage(img2.data, w, h, bytesPerLine, QImage.Format_RGB888)
+            # p = convertToQtFormat.scaled(201, 151)
+            p2 = convertToQtFormat2
+            self.changePixmap2.emit(p2)
 
-            cv2.imshow('seg2', frame_threshold2)
-            cv2.imshow('morhp2', frame_morph2)
+            img3 = cv2.cvtColor(frame_morph2, cv2.COLOR_GRAY2BGR)
+            h, w, ch = img3.shape
+            bytesPerLine = w * ch
+            convertToQtFormat3 = QImage(img3.data, w, h, bytesPerLine, QImage.Format_RGB888)
+            # p = convertToQtFormat.scaled(201, 151)
+            p3 = convertToQtFormat3
+            self.changePixmap3.emit(p3)
+
+            # cv2.imshow('seg', frame_threshold)
+            # cv2.imshow('morhp', frame_morph)
+
+            # cv2.imshow('seg2', frame_threshold2)
+            # cv2.imshow('morhp2', frame_morph2)
             # cv2.waitKey(1)
 
             #COMPUTING ERROR, menggunakan titik tengah marker dan landing area

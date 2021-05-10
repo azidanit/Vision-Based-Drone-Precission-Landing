@@ -40,6 +40,8 @@ class Gui(Ui_Form):
 
     def connectWidget(self):
         self.drone.changePixmap1.connect(self.setImage1)
+        self.drone.changePixmap2.connect(self.setImage2)
+        self.drone.changePixmap3.connect(self.setImage3)
         self.drone.changeFpsCounter.connect(lambda val: self.fps_label.setText(str(val)))
 
         self.pX_doubleSpinBox.valueChanged.connect(lambda val: self.drone.onPIDChanged('p','x',val))
@@ -89,6 +91,22 @@ class Gui(Ui_Form):
         self.mutex_label_pixmap.lock()
         try:
             self.imageLabel.setPixmap(QPixmap.fromImage(image))
+        finally:
+            self.mutex_label_pixmap.unlock()
+            self.condition_pixmap.wakeAll()
+
+    def setImage2(self, image):
+        self.mutex_label_pixmap.lock()
+        try:
+            self.image_label_2.setPixmap(QPixmap.fromImage(image))
+        finally:
+            self.mutex_label_pixmap.unlock()
+            self.condition_pixmap.wakeAll()
+
+    def setImage3(self, image):
+        self.mutex_label_pixmap.lock()
+        try:
+            self.image_label_3.setPixmap(QPixmap.fromImage(image))
         finally:
             self.mutex_label_pixmap.unlock()
             self.condition_pixmap.wakeAll()
