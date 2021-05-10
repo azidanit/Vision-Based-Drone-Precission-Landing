@@ -7,7 +7,7 @@ from DroneControl import DroneControl
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, QMutex, QWaitCondition
 from PyQt5.QtGui import QImage, QPixmap
-
+import rospy
 
 class Gui(Ui_Form):
     def __init__(self):
@@ -197,6 +197,7 @@ if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
     ui = Gui()
+    rospy.init_node('drone_controller')
     # Form = QtWidgets.QWidget()
     # ui = Ui_Form()
     # ui.setupUi(Form)

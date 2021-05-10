@@ -7,7 +7,7 @@ import numpy as np
 
 class CameraCapture:
     def __init__(self, name):
-        self.cap = VideoCapture(name, cv2.CAP_DSHOW)
+        self.cap = VideoCapture(name)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)

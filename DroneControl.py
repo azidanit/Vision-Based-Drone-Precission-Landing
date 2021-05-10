@@ -9,6 +9,8 @@ from threading import Thread, Lock
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject
 from PyQt5.QtGui import QImage
 
+import rospy
+from geometry_msgs.msg import TwistStamped
 
 
 class PID:
@@ -50,6 +52,7 @@ class DroneControl(QObject):
 
         self.initVar()
 
+        self.attitude_pub = rospy.Publisher('/mavros/setpoint_attitude/cmd_vel',TwistStamped,queue_size=1)
 
         self.openCamera(0)
 
@@ -182,6 +185,11 @@ class DroneControl(QObject):
         print("opening camera")
 
     def publishControlToMavros(self, vx, vy, vz):
+        msg = TwistStamped()
+        msg.twist.linear.x = vx # kiri 
+        msg.twist.linear.y = -vy # maju
+        msg.twist.linear.z = -vz
+        self.attitude_pub.publish(msg)
         print("V ", vx, " ", vy, " ", vz)
         pass
 
@@ -307,7 +315,7 @@ class DroneControl(QObject):
 
             cv2.imshow('seg2', frame_threshold2)
             cv2.imshow('morhp2', frame_morph2)
-            cv2.waitKey(1)
+            # cv2.waitKey(1)
 
             #COMPUTING ERROR, menggunakan titik tengah marker dan landing area
             center_landing_marker = None
