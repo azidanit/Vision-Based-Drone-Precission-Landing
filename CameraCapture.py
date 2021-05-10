@@ -7,7 +7,13 @@ import numpy as np
 
 class CameraCapture:
     def __init__(self, name):
-        self.cap = VideoCapture(name)
+        self.cap = VideoCapture(name, cv2.CAP_DSHOW)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        self.is_running = True
+
         print("camera capture")
         self.q = Queue()
 
@@ -16,7 +22,7 @@ class CameraCapture:
         t.start()
 
     def _reader(self):
-        while True:
+        while self.is_running:
             ret, frame = self.cap.read()
             if not ret:
                 break
@@ -37,6 +43,7 @@ class CameraCapture:
         return self.cap.isOpened()
 
     def release(self):
+        self.is_running = False
         self.cap.release()
 
     def get(self, args):

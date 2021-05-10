@@ -9,6 +9,8 @@ from threading import Thread, Lock
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject
 from PyQt5.QtGui import QImage
 
+
+
 class PID:
     def __init__(self):
         self.P = 0
@@ -44,6 +46,7 @@ class DroneControl(QObject):
         self.error_x_before = 0
         self.error_y_before = 0
         self.error_z_before = 0
+        self.is_running = True
 
         self.initVar()
 
@@ -174,7 +177,7 @@ class DroneControl(QObject):
 
 
     def openCamera(self, camera):
-        self.camera_thread = Thread(target=self.openCameraThread)
+        self.camera_thread = Thread(target=self.openCameraThread, args=(camera,))
         self.camera_thread.start()
         print("opening camera")
 
@@ -182,16 +185,21 @@ class DroneControl(QObject):
         print("V ", vx, " ", vy, " ", vz)
         pass
 
-    def openCameraThread(self):
+    def stopAllThread(self):
+        self.param_mutex.acquire()
+        self.is_running = False
+        self.param_mutex.release()
+
+    def openCameraThread(self, camera):
         print("opening camera Thread")
 
-        self.camera_capture = CameraCapture(0)
+        self.camera_capture = CameraCapture(camera)
         prev_frame_time = 0
         error_x = 0
         error_y = 0
         error_z = 0
 
-        while self.camera_capture.isOpened():
+        while self.camera_capture.isOpened() and self.is_running:
             # print("camera strating")
             new_frame_time = time.time()
             ret, img = self.camera_capture.read()
@@ -346,5 +354,7 @@ class DroneControl(QObject):
             fps = 1 / (new_frame_time - prev_frame_time)
             prev_frame_time = new_frame_time
             self.changeFpsCounter.emit(int(fps))
+
+        self.camera_capture.release()
     #signal
 
