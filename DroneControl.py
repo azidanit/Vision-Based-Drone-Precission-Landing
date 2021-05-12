@@ -6,7 +6,7 @@ from CameraCapture import CameraCapture
 
 import cv2
 from threading import Thread, Lock
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, QObject, QThread
 from PyQt5.QtGui import QImage
 
 import rospy
@@ -21,7 +21,7 @@ class PID:
         self.Multiplier = 0
 
 
-class DroneControl(QObject):
+class DroneControl(QThread):
     changePixmap1 = pyqtSignal(QImage)
     changePixmap2 = pyqtSignal(QImage)
     changePixmap3 = pyqtSignal(QImage)
