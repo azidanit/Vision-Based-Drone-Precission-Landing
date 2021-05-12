@@ -27,8 +27,11 @@ class DroneControl(QObject):
     changePixmap3 = pyqtSignal(QImage)
     changeFpsCounter = pyqtSignal(int)
 
-    def __init__(self):
+    def __init__(self, mutex, condition):
         super().__init__()
+
+        self.mutex_label_pixmap = mutex
+        self.condition_pixmap = condition
 
         print("drone control created")
         self.pid_x = PID()
@@ -200,10 +203,10 @@ class DroneControl(QObject):
         self.is_running = False
         self.param_mutex.release()
 
-    def openCameraThread(self, camera):
+    def run(self):
         print("opening camera Thread")
 
-        self.camera_capture = CameraCapture(camera)
+        self.camera_capture = CameraCapture(self.camera)
         prev_frame_time = 0
         error_x = 0
         error_y = 0
@@ -211,176 +214,194 @@ class DroneControl(QObject):
 
         while self.camera_capture.isOpened() and self.is_running:
             # print("camera strating")
-            new_frame_time = time.time()
-            ret, img = self.camera_capture.read()
+            try:
+                new_frame_time = time.time()
+                ret, img = self.camera_capture.read()
 
-            if not ret:
-                continue
-            frame_HSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-            frame_threshold = cv2.inRange(frame_HSV, (self.low_HSV[0], self.low_HSV[1], self.low_HSV[2]),
-                                          (self.high_HSV[0], self.high_HSV[1], self.high_HSV[2]))
-
-            element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.erode_size + 1, 2 * self.erode_size + 1),
-                                               (self.erode_size, self.erode_size))
-            erosion_dst = cv2.erode(frame_threshold, element)
-            element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.dilate_size + 1, 2 * self.dilate_size + 1),
-                                                (self.dilate_size, self.dilate_size))
-            frame_morph = cv2.dilate(erosion_dst, element)
-
-            contours, _ = cv2.findContours(frame_morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            contours_poly = [None] * len(contours)
-            boundRect = [None] * len(contours)
-            min_area = 400
-            i = 0
-            for q, c in enumerate(contours):
-                if cv2.contourArea(c) < min_area:
+                if not ret:
                     continue
+                frame_HSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-                contours_poly[i] = cv2.approxPolyDP(c, 3, True)
-                boundRect[i] = cv2.boundingRect(contours_poly[i])
-                # print(boundRect[i])
-                cv2.rectangle(img, (int(boundRect[i][0]), int(boundRect[i][1])), \
-                             (int(boundRect[i][0] + boundRect[i][2]), int(boundRect[i][1] + boundRect[i][3])), (255,0,0), 2)
-                i = i + 1
-###################################--------------------------------------------------
+                frame_threshold = cv2.inRange(frame_HSV, (self.low_HSV[0], self.low_HSV[1], self.low_HSV[2]),
+                                              (self.high_HSV[0], self.high_HSV[1], self.high_HSV[2]))
 
-            frame_threshold2 = cv2.inRange(frame_HSV, (self.low_HSV2[0], self.low_HSV2[1], self.low_HSV2[2]),
-                                          (self.high_HSV2[0], self.high_HSV2[1], self.high_HSV2[2]))
+                element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.erode_size + 1, 2 * self.erode_size + 1),
+                                                   (self.erode_size, self.erode_size))
+                erosion_dst = cv2.erode(frame_threshold, element)
+                element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.dilate_size + 1, 2 * self.dilate_size + 1),
+                                                    (self.dilate_size, self.dilate_size))
+                frame_morph = cv2.dilate(erosion_dst, element)
 
-            element2 = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.erode_size2 + 1, 2 * self.erode_size2 + 1),
-                                                (self.erode_size2, self.erode_size2))
-            erosion_dst2 = cv2.erode(frame_threshold2, element2)
-            element2 = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.dilate_size2 + 1, 2 * self.dilate_size2 + 1),
-                                                (self.dilate_size2, self.dilate_size2))
-            frame_morph2 = cv2.dilate(erosion_dst2, element2)
+                contours, _ = cv2.findContours(frame_morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            contours2, _ = cv2.findContours(frame_morph2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            contours_poly2 = [None] * len(contours2)
-            boundRect2 = [None] * len(contours2)
-            min_area2 = 400
-            i = 0
-            for q, c in enumerate(contours2):
-                if cv2.contourArea(c) < min_area2:
-                    continue
-
-                contours_poly2[i] = cv2.approxPolyDP(c, 3, True)
-                boundRect2[i] = cv2.boundingRect(contours_poly2[i])
-                cv2.rectangle(img, (int(boundRect2[i][0]), int(boundRect2[i][1])), \
-                              (int(boundRect2[i][0] + boundRect2[i][2]), int(boundRect2[i][1] + boundRect2[i][3])),
-                              (0, 255, 0), 2)
-                i = i + 1
-###################################--------------------------------------------------
-            landing_marker = []
-            if len(boundRect) < 50 or len(boundRect2) < 50:
-                for i in boundRect:
-                    if i == None:
+                contours_poly = [None] * len(contours)
+                boundRect = [None] * len(contours)
+                min_area = 400
+                i = 0
+                for q, c in enumerate(contours):
+                    if cv2.contourArea(c) < min_area:
                         continue
-                    tl = (int(i[0]), int(i[1]))
-                    br = (int(i[0] + i[2]), int(i[1] + i[3]))
-                    for y in boundRect2:
-                        if y == None:
+
+                    contours_poly[i] = cv2.approxPolyDP(c, 3, True)
+                    boundRect[i] = cv2.boundingRect(contours_poly[i])
+                    # print(boundRect[i])
+                    cv2.rectangle(img, (int(boundRect[i][0]), int(boundRect[i][1])), \
+                                 (int(boundRect[i][0] + boundRect[i][2]), int(boundRect[i][1] + boundRect[i][3])), (255,0,0), 2)
+                    i = i + 1
+    ###################################--------------------------------------------------
+
+                frame_threshold2 = cv2.inRange(frame_HSV, (self.low_HSV2[0], self.low_HSV2[1], self.low_HSV2[2]),
+                                              (self.high_HSV2[0], self.high_HSV2[1], self.high_HSV2[2]))
+
+                element2 = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.erode_size2 + 1, 2 * self.erode_size2 + 1),
+                                                    (self.erode_size2, self.erode_size2))
+                erosion_dst2 = cv2.erode(frame_threshold2, element2)
+                element2 = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * self.dilate_size2 + 1, 2 * self.dilate_size2 + 1),
+                                                    (self.dilate_size2, self.dilate_size2))
+                frame_morph2 = cv2.dilate(erosion_dst2, element2)
+
+                contours2, _ = cv2.findContours(frame_morph2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                contours_poly2 = [None] * len(contours2)
+                boundRect2 = [None] * len(contours2)
+                min_area2 = 400
+                i = 0
+                for q, c in enumerate(contours2):
+                    if cv2.contourArea(c) < min_area2:
+                        continue
+
+                    contours_poly2[i] = cv2.approxPolyDP(c, 3, True)
+                    boundRect2[i] = cv2.boundingRect(contours_poly2[i])
+                    cv2.rectangle(img, (int(boundRect2[i][0]), int(boundRect2[i][1])), \
+                                  (int(boundRect2[i][0] + boundRect2[i][2]), int(boundRect2[i][1] + boundRect2[i][3])),
+                                  (0, 255, 0), 2)
+                    i = i + 1
+    ###################################--------------------------------------------------
+                landing_marker = []
+                if len(boundRect) < 50 or len(boundRect2) < 50:
+                    for i in boundRect:
+                        if i == None:
                             continue
-                        tl2 = (int(y[0]), int(y[1]))
-                        br2 = (int(y[0] + y[2]), int(y[1] + y[3]))
+                        tl = (int(i[0]), int(i[1]))
+                        br = (int(i[0] + i[2]), int(i[1] + i[3]))
+                        for y in boundRect2:
+                            if y == None:
+                                continue
+                            tl2 = (int(y[0]), int(y[1]))
+                            br2 = (int(y[0] + y[2]), int(y[1] + y[3]))
 
-                        if (tl[0] <= tl2[0]) and (br[0] >= br2[0]) \
-                                and (tl[1] <= tl2[1]) and (br[1] >= br2[1]):
-                            cv2.rectangle(img, tl, \
-                                          br,
-                                          (0, 0, 255), 2)
-                            landing_marker.append((tl, br))
+                            if (tl[0] <= tl2[0]) and (br[0] >= br2[0]) \
+                                    and (tl[1] <= tl2[1]) and (br[1] >= br2[1]):
+                                cv2.rectangle(img, tl, \
+                                              br,
+                                              (0, 0, 255), 2)
+                                landing_marker.append((tl, br))
 
-            controlled_landing_marker = None
-            if len(landing_marker):
-                controlled_landing_marker = (landing_marker[0])
+                controlled_landing_marker = None
+                if len(landing_marker):
+                    controlled_landing_marker = (landing_marker[0])
 
-            cv2.rectangle(img, (self.landing_area[0][0],self.landing_area[0][1]),
-                          (self.landing_area[1][0],self.landing_area[1][1]), (255, 255, 255), 2)
+                cv2.rectangle(img, (self.landing_area[0][0],self.landing_area[0][1]),
+                              (self.landing_area[1][0],self.landing_area[1][1]), (255, 255, 255), 2)
 
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            # try:
-            # except Exception:
-            #     print(Exception)
-            h, w, ch = img.shape
-            bytesPerLine = ch * w
-            convertToQtFormat = QImage(img.data, w, h, bytesPerLine, QImage.Format_RGB888)
-            # p = convertToQtFormat.scaled(640, 480)
-            p = convertToQtFormat
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                h, w, ch = img.shape
+                bytesPerLine = ch * w
+                convertToQtFormat = QImage(img.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                # p = convertToQtFormat.scaled(640, 480)
+                p = convertToQtFormat
 
-            self.changePixmap1.emit(p)
+                self.changePixmap1.emit(p)
+                # if self.using_which_camera == 1:
+                #     h, w, ch = img.shape
+                #     bytesPerLine = ch * w
+                #     convertToQtFormat = QImage(img.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                #     # p = convertToQtFormat.scaled(640, 480)
+                #     p = convertToQtFormat
+                #
+                #     self.changePixmap1.emit(p)
+                # elif self.using_which_camera == 2:
+                #     img2 = cv2.cvtColor(frame_morph, cv2.COLOR_GRAY2BGR)
+                #     h, w , ch = img2.shape
+                #     bytesPerLine = w * ch
+                #     convertToQtFormat2 = QImage(img2.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                #     # p = convertToQtFormat.scaled(201, 151)
+                #     p2 = convertToQtFormat2
+                #     self.changePixmap2.emit(p2)
 
-            img2 = cv2.cvtColor(frame_morph, cv2.COLOR_GRAY2BGR)
-            h, w , ch = img2.shape
-            bytesPerLine = w * ch
-            convertToQtFormat2 = QImage(img2.data, w, h, bytesPerLine, QImage.Format_RGB888)
-            # p = convertToQtFormat.scaled(201, 151)
-            p2 = convertToQtFormat2
-            self.changePixmap2.emit(p2)
+                img2 = cv2.cvtColor(frame_morph, cv2.COLOR_GRAY2BGR)
+                h, w , ch = img2.shape
+                bytesPerLine = w * ch
+                convertToQtFormat2 = QImage(img2.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                # p = convertToQtFormat.scaled(201, 151)
+                p2 = convertToQtFormat2
+                self.changePixmap2.emit(p2)
 
-            img3 = cv2.cvtColor(frame_morph2, cv2.COLOR_GRAY2BGR)
-            h, w, ch = img3.shape
-            bytesPerLine = w * ch
-            convertToQtFormat3 = QImage(img3.data, w, h, bytesPerLine, QImage.Format_RGB888)
-            # p = convertToQtFormat.scaled(201, 151)
-            p3 = convertToQtFormat3
-            self.changePixmap3.emit(p3)
+                img3 = cv2.cvtColor(frame_morph2, cv2.COLOR_GRAY2BGR)
+                h, w, ch = img3.shape
+                bytesPerLine = w * ch
+                convertToQtFormat3 = QImage(img3.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                # p = convertToQtFormat.scaled(201, 151)
+                p3 = convertToQtFormat3
+                self.changePixmap3.emit(p3)
+                #
+                # cv2.imshow('seg', frame_threshold)
+                # cv2.imshow('morhp', frame_morph)
+                #
+                # cv2.imshow('seg2', frame_threshold2)
+                # cv2.imshow('morhp2', frame_morph2)
+                # cv2.waitKey(1)
 
-            # cv2.imshow('seg', frame_threshold)
-            # cv2.imshow('morhp', frame_morph)
+                #COMPUTING ERROR, menggunakan titik tengah marker dan landing area
+                center_landing_marker = None
+                if controlled_landing_marker != None and len(controlled_landing_marker):
+                    center_landing_marker = ( ((controlled_landing_marker[0][0] + controlled_landing_marker[1][0]) // 2),
+                                              ((controlled_landing_marker[0][1] + controlled_landing_marker[1][1]) // 2))
+                    # print("CENTER Marker ",center_landing_marker)
 
-            # cv2.imshow('seg2', frame_threshold2)
-            # cv2.imshow('morhp2', frame_morph2)
-            # cv2.waitKey(1)
+                if center_landing_marker != None:
+                    error_x = center_landing_marker[0] - self.center_landing_area[0]
+                    error_y = center_landing_marker[1] - self.center_landing_area[1]
 
-            #COMPUTING ERROR, menggunakan titik tengah marker dan landing area
-            center_landing_marker = None
-            if controlled_landing_marker != None and len(controlled_landing_marker):
-                center_landing_marker = ( ((controlled_landing_marker[0][0] + controlled_landing_marker[1][0]) // 2),
-                                          ((controlled_landing_marker[0][1] + controlled_landing_marker[1][1]) // 2))
-                # print("CENTER Marker ",center_landing_marker)
-
-            if center_landing_marker != None:
-                error_x = center_landing_marker[0] - self.center_landing_area[0]
-                error_y = center_landing_marker[1] - self.center_landing_area[1]
-
-                if ((controlled_landing_marker[0][0] >= self.landing_area[0][0]) \
-                    and (controlled_landing_marker[1][0] <= self.landing_area[1][0]) \
-                    and (controlled_landing_marker[0][1] >= self.landing_area[0][1]) \
-                    and (controlled_landing_marker[1][1] <= self.landing_area[1][1])) \
-                        or ((controlled_landing_marker[0][0] <= self.landing_area[0][0]) \
-                    and (controlled_landing_marker[1][0] >= self.landing_area[1][0]) \
-                    and (controlled_landing_marker[0][1] <= self.landing_area[0][1]) \
-                    and (controlled_landing_marker[1][1] >= self.landing_area[1][1])):
-                        # print("TURUN")
-                        error_z = 10
-
-
-                # print("Error X Y ", error_x, " ", error_y)
+                    if ((controlled_landing_marker[0][0] >= self.landing_area[0][0]) \
+                        and (controlled_landing_marker[1][0] <= self.landing_area[1][0]) \
+                        and (controlled_landing_marker[0][1] >= self.landing_area[0][1]) \
+                        and (controlled_landing_marker[1][1] <= self.landing_area[1][1])) \
+                            or ((controlled_landing_marker[0][0] <= self.landing_area[0][0]) \
+                        and (controlled_landing_marker[1][0] >= self.landing_area[1][0]) \
+                        and (controlled_landing_marker[0][1] <= self.landing_area[0][1]) \
+                        and (controlled_landing_marker[1][1] >= self.landing_area[1][1])):
+                            # print("TURUN")
+                            error_z = 10
 
 
-            else:
-                error_x = 0
-                error_y = 0
-                error_z = 0 #BISA DINAIKKAN DRONE NYA CARI LAGI
+                    # print("Error X Y ", error_x, " ", error_y)
 
-            vx = self.calculatePIDError(self.pid_x, error_x, self.error_x_before, error_x + self.error_x_before)
-            vy = self.calculatePIDError(self.pid_y, error_y, self.error_y_before, error_y + self.error_y_before)
-            vz = self.calculatePIDError(self.pid_z, error_z, self.error_z_before, error_z + self.error_z_before)
 
-            self.error_x_before = error_x
-            self.error_y_before = error_y
-            self.error_z_before = error_z
+                else:
+                    error_x = 0
+                    error_y = 0
+                    error_z = 0 #BISA DINAIKKAN DRONE NYA CARI LAGI
 
-            velocity_divider = 100
-            self.publishControlToMavros(vx / velocity_divider, vy / velocity_divider, vz / velocity_divider)
+                vx = self.calculatePIDError(self.pid_x, error_x, self.error_x_before, error_x + self.error_x_before)
+                vy = self.calculatePIDError(self.pid_y, error_y, self.error_y_before, error_y + self.error_y_before)
+                vz = self.calculatePIDError(self.pid_z, error_z, self.error_z_before, error_z + self.error_z_before)
 
-            fps = 1 / (new_frame_time - prev_frame_time)
-            prev_frame_time = new_frame_time
-            self.changeFpsCounter.emit(int(fps))
+                self.error_x_before = error_x
+                self.error_y_before = error_y
+                self.error_z_before = error_z
 
+                velocity_divider = 100
+                self.publishControlToMavros(vx / velocity_divider, vy / velocity_divider, vz / velocity_divider)
+
+                fps = 1 / (new_frame_time - prev_frame_time)
+                prev_frame_time = new_frame_time
+                self.changeFpsCounter.emit(int(fps))
+
+                time.sleep(0.02)
+            except:
+                time.sleep(0.02)
+                print("some error")
         self.camera_capture.release()
     #signal
 

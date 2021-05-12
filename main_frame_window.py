@@ -22,10 +22,12 @@ class Gui(Ui_Form):
 
         self.show()
         # self.Form.show()
-        self.drone = DroneControl()
 
         self.mutex_label_pixmap = QMutex()
         self.condition_pixmap = QWaitCondition()
+
+        self.drone = DroneControl(self.mutex_label_pixmap, self.condition_pixmap)
+        self.drone.start()
 
         self.connectWidget()
 
